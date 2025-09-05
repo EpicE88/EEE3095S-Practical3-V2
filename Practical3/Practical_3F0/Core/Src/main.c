@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2025 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -31,7 +31,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define MAX_ITER 100
+#define MAX_CYCLES 0xFFFFFFFFULL
+#define WIDTH 128
+#define HEIGHT 128
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,8 +45,27 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-//TODO: Define variables you think you might need
-// - Performance timing variables (e.g execution time, throughput, pixels per second, clock cycles)
+// TODO: Define variables you think you might need
+//  - Performance timing variables (e.g execution time, throughput, pixels per second, clock cycles)
+//checksum
+volatile uint64_t checksum = 0;
+
+//execution time
+volatile uint32_t start_time = 0;
+volatile uint32_t end_time = 0;
+volatile uint32_t execution_time = 0;
+
+//cycles
+volatile uint32_t start_cycle = 0;
+volatile uint32_t end_cycle = 0;
+volatile uint64_t total_cycles = 0;
+volatile uint32_t overflow_count = 0;
+volatile uint32_t start_overflow = 0;
+volatile uint32_t end_overflow = 0;
+
+//throughput
+volatile uint32_t total_pixels = WIDTH * HEIGHT;
+volatile uint32_t throughput = 0;
 
 // Fixed-point arithmetic constants
 #define SHIFT 16
@@ -75,9 +97,14 @@ volatile int test_index = 0;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-//TODO: Define any function prototypes you might need such as the calculate Mandelbrot function among others
-uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int max_iterations);
+
+// TODO: Define any function prototypes you might need such as the calculate Mandelbrot function among others
+
 uint64_t calculate_mandelbrot_double(int width, int height, int max_iterations);
+uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int max_iterations);
+void init_TIM2(void);
+void TIM2_IRQHandler(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -86,14 +113,14 @@ uint64_t calculate_mandelbrot_double(int width, int height, int max_iterations);
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  init_TIM2();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -125,6 +152,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
 	  //TODO: Visual indicator: Turn on LED0 to signal processing start
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // Start LED ON
 
@@ -139,14 +167,48 @@ int main(void)
 			  
 			  // Record the start time
 			  start_time = HAL_GetTick();
+        
+        //Measure start cycles and overflow count
+        start_cycle = TIM2->CNT;
+        start_overflow = overflow_count;
 			  
 			  checksum = calculate_mandelbrot_double(current_image_size, current_image_size, current_max_iter);
+        
+        //Measure end cycles and overflow count
+        end_cycle = TIM2->CNT;
+        end_overflow = overflow_count;
 			  
 			  // Record the end time
 			  end_time = HAL_GetTick();
 			  
 			  // Calculate the execution time
 			  execution_time = end_time - start_time;
+        
+        //Calculate number of cycles
+        if (end_overflow > start_overflow){
+          //Overflows occured
+
+          //calculate number of cycles from start until counter wraps
+          total_cycles = MAX_CYCLES - start_cycle;
+
+          //calculate cycles for full periods between overflows
+          total_cycles += (uint64_t)(end_overflow - start_overflow - 1) * MAX_CYCLES;
+
+          //add remaining partial cycles after last overflow
+          total_cycles += end_cycle;
+        }
+        else{
+          // No overflow
+          total_cycles = end_cycle - start_cycle;
+        }
+
+        //Calculate throughput (pixels/sec)
+        if (execution_time > 0){
+          throughput = (total_pixels * 1000) / execution_time; //convert to seconds
+        }
+        else{
+          throughput = 0; //prevent division by 0
+        }
 			  
 			  // Set breakpoint HERE to record results for each test
 			  // Use Live Expressions: current_max_iter, current_image_size, checksum, execution_time
@@ -165,22 +227,23 @@ int main(void)
 	  //TODO: Turn OFF LEDs
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+
   }
   /* USER CODE END 3 */
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -194,9 +257,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
@@ -208,10 +270,10 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -225,13 +287,11 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
-                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PB0 PB1 PB2 PB3
                            PB4 PB5 PB6 PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
-                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
+  GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -243,7 +303,67 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-//TODO: Function signatures you defined previously , implement them here
+// TODO: Function signatures you defined previously , implement them here
+uint64_t calculate_mandelbrot_double(int width, int height, int max_iterations)
+{
+  uint64_t mandelbrot_sum = 0;
+  // TODO: Complete the function implementation
+  for (int y = 0; y < height; y++)
+  {
+    double y0 = (double)y * 2.0 / height - 1.0; // Scale y coordinate
+
+    for (int x = 0; x < width; x++)
+    {
+      double x0 = (double)x * 3.5 / width - 2.5; // Scale x coordinate
+      double xi = 0.0;
+      double yi = 0.0;
+      int iteration = 0;
+
+      while (iteration < max_iterations && (xi * xi + yi * yi <= 4.0))
+      {
+        double temp = xi * xi - yi * yi + x0; // Calculate x component
+        yi = 2.0 * xi * yi + y0;              // Calculate y component
+        xi = temp;                            // Update xi
+        iteration++;
+      }
+      // Accumulate iteration count for this pixel
+      mandelbrot_sum += iteration;
+    }
+  }
+  return mandelbrot_sum;
+}
+
+/**
+ * Method that initialises timer 2 to measure clock cycles
+ */
+void init_TIM2(void){
+  //Enable TIM2
+  RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+
+  //Configure timer parameters to measure clock cycles
+  TIM2->PSC = 0; // tick at CPU clock speed
+  TIM2->ARR = 0xFFFFFFFF; //Set ARR to max
+  TIM2->CNT = 0; //Reset counter
+
+  //Enable overflow interrupt
+  TIM2->DIER |= TIM_DIER_UIE;
+  NVIC_EnableIRQ(TIM2_IRQn) ;//for interrupt handler
+
+  overflow_count = 0;
+  TIM2->CR1 |= TIM_CR1_CEN; //start the timer
+
+}
+
+/**
+ * Interrupt handler for TIM2
+ */
+void TIM2_IRQHandler(void) {
+  //If overflow occurs
+    if (TIM2->SR & TIM_SR_UIF) {
+        overflow_count++;
+        TIM2->SR &= ~TIM_SR_UIF; // Clear overflow flag
+    }
+}
 
 // Helper function for fixed-point multiplication
 static inline int64_t mult(int64_t a, int64_t b)
@@ -324,9 +444,9 @@ uint64_t calculate_mandelbrot_double(int width, int height, int max_iterations)
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -339,12 +459,12 @@ void Error_Handler(void)
 }
 #ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
