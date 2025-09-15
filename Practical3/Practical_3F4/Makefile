@@ -25,6 +25,9 @@ DEBUG = 1
 # TODO:Compiler Optimisation levels
 # optimization
 OPT = -Og
+#OPT = -O0
+#OPT = -O2
+#OPT = -Os
 
 
 #######################################
