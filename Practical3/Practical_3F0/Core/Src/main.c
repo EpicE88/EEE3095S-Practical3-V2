@@ -620,6 +620,9 @@ void run_task6(void)
         current_image_size = imageDimensions[size_idx];
         current_max_iter = 100; // Fixed for Task 6
         
+        // Calculate total pixels for througput
+        total_pixels = current_image_size * current_image_size;
+
         // Record start time
         start_time = HAL_GetTick();
         
@@ -629,6 +632,16 @@ void run_task6(void)
         // Record end time
         end_time = HAL_GetTick();
         execution_time = end_time - start_time;
+
+        // Calculate throughput (pixels per second)
+        if (execution_time > 0)
+        {
+          throughput = (total_pixels * 1000) / execution_time; // Convert ms to seconds
+        }
+        else
+        {
+          throughput = 0; // Prevent division by 0
+        }
         
         // Set breakpoint HERE to record results for each test
         // Use Live Expressions: current_image_size, checksum, execution_time
