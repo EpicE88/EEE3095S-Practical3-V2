@@ -63,7 +63,7 @@ volatile uint32_t start_overflow = 0;
 volatile uint32_t end_overflow = 0;
 
 //throughput
-volatile uint32_t total_pixels = WIDTH * HEIGHT;
+volatile uint32_t total_pixels = 0;
 volatile uint32_t throughput = 0;
 
 // Fixed-point arithmetic constants
@@ -158,8 +158,8 @@ int main(void)
 
     //run_task1();
     //run_task2(); 
-    //run_task3();
-    run_task6();
+    run_task3();
+    //run_task6();
 
     // Delay before repeating the loop
     HAL_Delay(1000);
@@ -502,10 +502,11 @@ void run_task3(void)
             total_cycles = end_cycle - start_cycle;
         }
         
-        // Each timer tick = 2 CPU cycles since TIM2 is running at 60MHz while CPU at 120MHz
-        total_cycles = total_cycles * 2;
-        
         // Calculate throughput (pixels per second)
+
+        //Calculate total number of pixels
+        total_pixels = imageDimensions[size_idx] * imageDimensions[size_idx];
+
         if (execution_time > 0)
         {
             throughput = (total_pixels * 1000) / execution_time; // Convert ms to seconds
