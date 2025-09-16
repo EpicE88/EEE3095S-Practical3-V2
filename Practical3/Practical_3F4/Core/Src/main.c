@@ -72,9 +72,9 @@ volatile int current_max_iter = 0;
 volatile int current_image_size = 0;
 volatile int test_index = 0;
 
-//For debugging
-volatile uint32_t system_clock_freq = 0;
-volatile uint32_t timer_clock_freq = 0;
+// scalabiliy
+volatile int width = 0;
+volatile int height = 0;
 
 // Fixed-point arithmetic constants
 #define SHIFT 16
@@ -87,6 +87,10 @@ volatile uint32_t timer_clock_freq = 0;
 
 // Image dimensions for testing (square images)
 int imageDimensions[] = {128, 160, 192, 224, 256};
+
+//Image dimensions for scalability test
+int horizontalScale[] = {128, 160, 192, 224, 256, 320, 640, 800, 1280, 1920};
+int verticalScale[] = {128, 160, 192, 224, 256, 240, 480, 600, 720, 1080};
 
 // Max iterations values for testing 
 int maxIterValues[] = {100, 250, 500, 750, 1000};
@@ -107,6 +111,7 @@ uint64_t calculate_mandelbrot_float(int width, int height, int max_iterations);
 void run_task1(void);
 void run_task2(void);
 void run_task3(void);
+void run_task4(void);
 void run_task5(void);
 void run_task6(void);
 
@@ -166,7 +171,9 @@ int main(void)
 
     //run_task2();
 
-    run_task3();
+    //run_task3();
+
+    run_task4();
 
     //run_task5();
 
@@ -580,6 +587,62 @@ void run_task3(void)
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
 }
 
+/**
+ * Scalability Test up to Full HD (1920x1080)
+ */
+void run_task4(void){
+  // Visual indicator: Turn on LED0 to signal processing start
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+  // Task 3: Test with fixed MAX_ITER=100 and measure extended metrics
+  for (int size_idx = 0; size_idx < 10; size_idx++) {
+    width = horizontalScale[size_idx];
+    height = verticalScale[size_idx];
+
+    current_max_iter = 100; // Fixed for Task 4
+    
+    // Calculate total pixels for this test
+    total_pixels = width * height;
+    
+    // Record the start time (wall-clock time)
+    start_time = HAL_GetTick();
+    
+    // Call the Mandelbrot Function
+    checksum = calculate_mandelbrot_double(width, height, current_max_iter);
+    
+    // Record the end time (wall-clock time)
+    end_time = HAL_GetTick();
+    
+    // Calculate the execution time in milliseconds
+    execution_time = end_time - start_time;
+      
+    // Calculate throughput (pixels per second)
+    if (execution_time > 0)
+    {
+      throughput = (total_pixels * 1000) / execution_time; // Convert ms to seconds
+    }
+    else
+    {
+      throughput = 0; // Prevent division by 0
+    }
+        
+    // Set breakpoint HERE to record results for each test
+    // Use Live Expressions: current_image_size, checksum, execution_time, total_cycles, throughput
+      
+    // Brief pause between tests
+    HAL_Delay(5000);
+  }
+
+  // Visual indicator: Turn on LED1 to signal processing end
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+  // Keep the LEDs ON for 2s
+  HAL_Delay(2000);
+
+  // Turn OFF LEDs
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+}
 
 /**
  * Test FPU enabled/disabled with float vs double precision
