@@ -26,7 +26,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-#define MAX_ITER 100
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -34,6 +34,21 @@
 #define MAX_CYCLES 0xFFFFFFFFULL
 #define WIDTH 128
 #define HEIGHT 128
+#define MAX_ITER 100
+
+//define scaling
+#define SHIFT12 12 //4096 scaling
+#define SHIFT16 16 //65 536 scaling
+#define SHIFT20 24 //16 777 216 scaling
+
+#define S (1LL << SHIFT16) 
+
+//Precompute all fixed integer values in fixed-point
+#define FIXED_2_5 ((int64_t)(2.5 * S))
+#define FIXED_3_5 ((int64_t)(3.5 * S))
+#define FIXED_2_0 ((int64_t)(2 * S))
+#define FIXED_4_0 ((int64_t)(4 * S))
+#define FIXED_1_0 ((int64_t)(1 * S))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -70,15 +85,6 @@ volatile uint32_t throughput = 0;
 volatile int width = 0;
 volatile int height = 0;
 
-// Fixed-point arithmetic constants
-#define SHIFT 16
-#define S (1LL << 16) // 65536 scaling
-#define FIXED_2_5 ((int64_t)(2.5 * S))
-#define FIXED_3_5 ((int64_t)(3.5 * S))
-#define FIXED_2_0 ((int64_t)(2 * S))
-#define FIXED_4_0 ((int64_t)(4 * S))
-#define FIXED_1_0 ((int64_t)(1 * S))
-
 // Benchmarking control variables
 volatile int current_max_iter = 0;
 volatile int current_image_size = 0;
@@ -112,6 +118,7 @@ void run_task2(void);
 void run_task3(void);
 void run_task4(void);
 void run_task6(void);
+void run_task7(void);
 
 // Timer functions prototypes
 void init_TIM2(void);
@@ -171,9 +178,11 @@ int main(void)
 
     //run_task3();
 
-    run_task4();
+    //run_task4();
 
     //run_task6();
+
+    run_task7();
 
     // Delay before repeating the loop
     HAL_Delay(1000);
@@ -295,7 +304,7 @@ void TIM2_IRQHandler(void)
 */
 static inline int64_t mult(int64_t a, int64_t b)
 {
-  return (a * b) >> SHIFT;
+  return (a * b) >> SHIFT16;
 }
 
 /*
@@ -305,18 +314,15 @@ uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int 
 {
   uint64_t result = 0;
 
-  // Precompute outside loop
-  int64_t preX = (FIXED_3_5) / width;
-  int64_t preY = (FIXED_2_0) / height;
-
   for (int y = 0; y < height; y++)
   {
     // y0 = (y / height) * 2.0 - 1.0
-    int64_t y0 = (y * preY) - FIXED_1_0;
+    int64_t y0 = ((y * FIXED_2_0) / height) - FIXED_1_0;
     for (int x = 0; x < width; x++)
     {
+
       // x0 = (x / width) * 3.5 - 2.5
-      int64_t x0 = (x * preX) - FIXED_2_5;
+      int64_t x0 = ((x * FIXED_3_5) / width) - FIXED_2_5;
 
       int64_t xi = 0;
       int64_t yi = 0;
@@ -659,6 +665,48 @@ void run_task6(void)
     // Turn off LEDs
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+}
+
+/**
+ * Fixed-point arithmetic
+ */
+void run_task7(void){
+  // Visual indicator: Turn on LED0 to signal processing start
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+  // Task 7: Test with fixed MAX_ITER=100 and image sizes from Practical 1B
+  for (int size_idx = 0; size_idx < 5; size_idx++) {
+    current_image_size = imageDimensions[size_idx];
+    current_max_iter = 100; // Fixed for Task 7
+    
+    // Record the start time
+    start_time = HAL_GetTick();
+    
+    // Call the Mandelbrot Function
+    checksum = calculate_mandelbrot_fixed_point_arithmetic(current_image_size, current_image_size, current_max_iter);
+    
+    // Record the end time
+    end_time = HAL_GetTick();
+    
+    // Calculate the execution time
+    execution_time = end_time - start_time;
+    
+    // Set breakpoint HERE to record results for each test
+    // Use Live Expressions: current_max_iter, current_image_size, checksum, execution_time
+    
+    // Brief pause between tests
+    HAL_Delay(5000);
+  }
+
+  // Visual indicator: Turn on LED1 to signal processing end
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+  // Keep the LEDs ON for 2s
+  HAL_Delay(2000);
+
+  // Turn OFF LEDs
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
 }
 
 /* USER CODE END 4 */
