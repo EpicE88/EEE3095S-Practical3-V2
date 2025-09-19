@@ -37,11 +37,11 @@
 #define MAX_ITER 100
 
 // define scaling
-#define SHIFT12 12 //4096 scaling
+#define SHIFT10 10 //1024 scaling
 #define SHIFT16 16 //65 536 scaling
-#define SHIFT20 24 //16 777 216 scaling
+#define SHIFT28 28 //268 435 456 scaling
 
-#define S (1LL << SHIFT16) 
+#define S (1LL << SHIFT28) 
 
 //Precompute all fixed integer values in fixed-point
 #define FIXED_2_5 ((int64_t)(2.5 * S))
@@ -124,6 +124,7 @@ void run_task4(void);
 void run_task5(void);
 void run_task6(void);
 void run_task7(void);
+void run_task8(void);
 
 // Timer function prototypes
 void init_TIM2(void);
@@ -189,7 +190,9 @@ int main(void)
 
     //run_task6();
 
-    run_task7();
+    //run_task7();
+
+    run_task8();
 
     //HAL_Delay(1000);
     //break;
@@ -345,7 +348,7 @@ void TIM2_IRQHandler(void)
 // Helper function for fixed-point multiplication
 static inline int64_t mult(int64_t a, int64_t b)
 {
-  return (a * b) >> SHIFT16;
+  return (a * b) >> SHIFT28;
 }
 
 // Mandelbrot using fixed-point arithmetic
@@ -789,7 +792,6 @@ void run_task7(void){
     // Use Live Expressions: current_max_iter, current_image_size, checksum, execution_time
     
     // Brief pause between tests
-    HAL_Delay(5000);
   }
 
   // Visual indicator: Turn on LED1 to signal processing end
@@ -801,6 +803,43 @@ void run_task7(void){
   // Turn OFF LEDs
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+}
+
+/**
+ * Power measurement: Measure execution times
+ */
+void run_task8(void){
+      // Visual indicator: Turn on LED0 to signal processing start
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+    // Task 8: Test with fixed MAX_ITER=100 and image sizes from Practical 1B
+    for (int size_idx = 0; size_idx < 5; size_idx++) {
+        current_image_size = imageDimensions[size_idx];
+        current_max_iter = 100; // Fixed for Task 1
+        
+        // Record the start time
+        start_time = HAL_GetTick();
+        
+        // Call the Mandelbrot Function
+        checksum = calculate_mandelbrot_double(current_image_size, current_image_size, current_max_iter);
+        
+        // Record the end time
+        end_time = HAL_GetTick();
+        
+        // Calculate the execution time
+        execution_time = end_time - start_time;
+        
+    }
+
+    // Visual indicator: Turn on LED1 to signal processing end
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+    // Keep the LEDs ON for 2s
+    HAL_Delay(2000);
+
+    // Turn OFF LEDs
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
 }
 
 /* USER CODE END 4 */
