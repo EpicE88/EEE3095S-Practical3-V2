@@ -26,7 +26,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-#define MAX_ITER 100
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -34,6 +34,21 @@
 #define MAX_CYCLES 0xFFFFFFFFULL
 #define WIDTH 128
 #define HEIGHT 128
+#define MAX_ITER 100
+
+//define scaling
+#define SHIFT10 10 //1024 scaling
+#define SHIFT16 16 //65 536 scaling
+#define SHIFT28 28 //268 435 456 scaling
+
+#define S (1LL << SHIFT28) 
+
+//Precompute all fixed integer values in fixed-point
+#define FIXED_2_5 ((int64_t)(2.5 * S))
+#define FIXED_3_5 ((int64_t)(3.5 * S))
+#define FIXED_2_0 ((int64_t)(2 * S))
+#define FIXED_4_0 ((int64_t)(4 * S))
+#define FIXED_1_0 ((int64_t)(1 * S))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,17 +78,12 @@ volatile uint32_t start_overflow = 0;
 volatile uint32_t end_overflow = 0;
 
 //throughput
-volatile uint32_t total_pixels = WIDTH * HEIGHT;
+volatile uint32_t total_pixels = 0;
 volatile uint32_t throughput = 0;
 
-// Fixed-point arithmetic constants
-#define SHIFT 16
-#define S (1LL << 16) // 65536 scaling
-#define FIXED_2_5 ((int64_t)(2.5 * S))
-#define FIXED_3_5 ((int64_t)(3.5 * S))
-#define FIXED_2_0 ((int64_t)(2 * S))
-#define FIXED_4_0 ((int64_t)(4 * S))
-#define FIXED_1_0 ((int64_t)(1 * S))
+// scalabiliy
+volatile int width = 0;
+volatile int height = 0;
 
 // Benchmarking control variables
 volatile int current_max_iter = 0;
@@ -82,6 +92,10 @@ volatile int test_index = 0;
 
 // Image dimensions for testing (square images)
 int imageDimensions[] = {128, 160, 192, 224, 256};
+
+//Image dimensions for scalability test
+int horizontalScale[] = {128, 160, 192, 224, 256, 320, 640, 800, 1280, 1920};
+int verticalScale[] = {128, 160, 192, 224, 256, 240, 480, 600, 720, 1080};
 
 // Max iterations values for testing 
 int maxIterValues[] = {100, 250, 500, 750, 1000};
@@ -102,7 +116,10 @@ uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int 
 void run_task1(void);
 void run_task2(void);
 void run_task3(void);
+void run_task4(void);
 void run_task6(void);
+void run_task7(void);
+void run_task8(void);
 
 // Timer functions prototypes
 void init_TIM2(void);
@@ -157,9 +174,18 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
     //run_task1();
-    //run_task2(); 
+
+    //run_task2();
+
     //run_task3();
-    run_task6();
+
+    //run_task4();
+
+    //run_task6();
+
+    //run_task7();
+
+    run_task8();
 
     // Delay before repeating the loop
     HAL_Delay(1000);
@@ -281,7 +307,7 @@ void TIM2_IRQHandler(void)
 */
 static inline int64_t mult(int64_t a, int64_t b)
 {
-  return (a * b) >> SHIFT;
+  return (a * b) >> SHIFT28;
 }
 
 /*
@@ -291,18 +317,15 @@ uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int 
 {
   uint64_t result = 0;
 
-  // Precompute outside loop
-  int64_t preX = (FIXED_3_5) / width;
-  int64_t preY = (FIXED_2_0) / height;
-
   for (int y = 0; y < height; y++)
   {
     // y0 = (y / height) * 2.0 - 1.0
-    int64_t y0 = (y * preY) - FIXED_1_0;
+    int64_t y0 = ((y * FIXED_2_0) / height) - FIXED_1_0;
     for (int x = 0; x < width; x++)
     {
+
       // x0 = (x / width) * 3.5 - 2.5
-      int64_t x0 = (x * preX) - FIXED_2_5;
+      int64_t x0 = ((x * FIXED_3_5) / width) - FIXED_2_5;
 
       int64_t xi = 0;
       int64_t yi = 0;
@@ -502,10 +525,11 @@ void run_task3(void)
             total_cycles = end_cycle - start_cycle;
         }
         
-        // Each timer tick = 2 CPU cycles since TIM2 is running at 60MHz while CPU at 120MHz
-        total_cycles = total_cycles * 2;
-        
         // Calculate throughput (pixels per second)
+
+        //Calculate total number of pixels
+        total_pixels = imageDimensions[size_idx] * imageDimensions[size_idx];
+
         if (execution_time > 0)
         {
             throughput = (total_pixels * 1000) / execution_time; // Convert ms to seconds
@@ -534,6 +558,62 @@ void run_task3(void)
 }
 
 /**
+ * Scalability Test up to Full HD (1920x1080)
+ */
+void run_task4(void){
+  // Visual indicator: Turn on LED0 to signal processing start
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+  for (int size_idx = 0; size_idx < 10; size_idx++) {
+    width = horizontalScale[size_idx];
+    height = verticalScale[size_idx];
+
+    current_max_iter = 100; // Fixed for Task 4
+    
+    // Calculate total pixels for this test
+    total_pixels = width * height;
+    
+    // Record the start time (wall-clock time)
+    start_time = HAL_GetTick();
+    
+    // Call the Mandelbrot Function
+    checksum = calculate_mandelbrot_double(width, height, current_max_iter);
+    
+    // Record the end time (wall-clock time)
+    end_time = HAL_GetTick();
+    
+    // Calculate the execution time in milliseconds
+    execution_time = end_time - start_time;
+
+    // Calculate throughput (pixels per second)
+    if (execution_time > 0)
+    {
+    throughput = (total_pixels * 1000) / execution_time; // Convert ms to seconds
+    }
+    else
+    {
+    throughput = 0; // Prevent division by 0
+    }
+      
+    // Set breakpoint HERE to record results for each test
+    // Use Live Expressions: current_image_size, checksum, execution_time, total_cycles, throughput
+      
+    // Brief pause between tests
+    HAL_Delay(5000);
+  }
+
+  // Visual indicator: Turn on LED1 to signal processing end
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+  // Keep the LEDs ON for 2s
+  HAL_Delay(2000);
+
+  // Turn OFF LEDs
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+}
+
+/**
  * Task 6: Compiler optimisations
  */
 void run_task6(void)
@@ -549,6 +629,9 @@ void run_task6(void)
         current_image_size = imageDimensions[size_idx];
         current_max_iter = 100; // Fixed for Task 6
         
+        // Calculate total pixels for througput
+        total_pixels = current_image_size * current_image_size;
+
         // Record start time
         start_time = HAL_GetTick();
         
@@ -558,6 +641,16 @@ void run_task6(void)
         // Record end time
         end_time = HAL_GetTick();
         execution_time = end_time - start_time;
+
+        // Calculate throughput (pixels per second)
+        if (execution_time > 0)
+        {
+          throughput = (total_pixels * 1000) / execution_time; // Convert ms to seconds
+        }
+        else
+        {
+          throughput = 0; // Prevent division by 0
+        }
         
         // Set breakpoint HERE to record results for each test
         // Use Live Expressions: current_image_size, checksum, execution_time
@@ -575,6 +668,88 @@ void run_task6(void)
     // Turn off LEDs
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+}
+
+/**
+ * Fixed-point arithmetic
+ */
+void run_task7(void){
+  // Visual indicator: Turn on LED0 to signal processing start
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+  // Task 7: Test with fixed MAX_ITER=100 and image sizes from Practical 1B
+  for (int size_idx = 0; size_idx < 5; size_idx++) {
+    current_image_size = imageDimensions[size_idx];
+    current_max_iter = 100; // Fixed for Task 7
+    
+    // Record the start time
+    start_time = HAL_GetTick();
+    
+    // Call the Mandelbrot Function
+    checksum = calculate_mandelbrot_fixed_point_arithmetic(current_image_size, current_image_size, current_max_iter);
+    
+    // Record the end time
+    end_time = HAL_GetTick();
+    
+    // Calculate the execution time
+    execution_time = end_time - start_time;
+    
+    // Set breakpoint HERE to record results for each test
+    // Use Live Expressions: current_max_iter, current_image_size, checksum, execution_time
+    
+
+  }
+
+  // Visual indicator: Turn on LED1 to signal processing end
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+  // Keep the LEDs ON for 2s
+  HAL_Delay(2000);
+
+  // Turn OFF LEDs
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+}
+
+/**
+ * Power measurement: Measure execution time to measure all image sizes
+ */
+void run_task8(void){
+
+  // Record the start time
+  start_time = HAL_GetTick();
+
+  // Visual indicator: Turn on LED0 to signal processing start
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+  // Task 8: Test with fixed MAX_ITER=100 and image sizes from Practical 1B
+  for (int size_idx = 0; size_idx < 5; size_idx++) {
+    current_image_size = imageDimensions[size_idx];
+    current_max_iter = 100; // Fixed for Task 1
+    
+    // Record the start time
+    start_time = HAL_GetTick();
+    
+    // Call the Mandelbrot Function
+    checksum = calculate_mandelbrot_double(current_image_size, current_image_size, current_max_iter);
+      
+  }
+
+  // Visual indicator: Turn on LED1 to signal processing end
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+  // Keep the LEDs ON for 2s
+  HAL_Delay(2000);
+
+  // Turn OFF LEDs
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+
+  // Record the end time
+  end_time = HAL_GetTick();
+
+  // Calculate the execution time
+  execution_time = end_time - start_time;
 }
 
 /* USER CODE END 4 */
