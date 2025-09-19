@@ -712,9 +712,13 @@ void run_task7(void){
 }
 
 /**
- * Power measurement: Measure execution times
+ * Power measurement: Measure execution time to measure all image sizes
  */
 void run_task8(void){
+
+  // Record the start time
+  start_time = HAL_GetTick();
+
   // Visual indicator: Turn on LED0 to signal processing start
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
@@ -728,13 +732,7 @@ void run_task8(void){
     
     // Call the Mandelbrot Function
     checksum = calculate_mandelbrot_double(current_image_size, current_image_size, current_max_iter);
-    
-    // Record the end time
-    end_time = HAL_GetTick();
-    
-    // Calculate the execution time
-    execution_time = end_time - start_time;
-    
+      
   }
 
   // Visual indicator: Turn on LED1 to signal processing end
@@ -746,6 +744,12 @@ void run_task8(void){
   // Turn OFF LEDs
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+
+  // Record the end time
+  end_time = HAL_GetTick();
+
+  // Calculate the execution time
+  execution_time = end_time - start_time;
 }
 
 /* USER CODE END 4 */
